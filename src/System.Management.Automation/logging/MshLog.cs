@@ -828,13 +828,25 @@ namespace System.Management.Automation
                 logContext.CommandName = invocationInfo.MyCommand.Name;
                 logContext.CommandType = invocationInfo.MyCommand.CommandType.ToString();
 
-                switch (invocationInfo.MyCommand.CommandType)
+                // Switch on the runtime type, not on CommandType. The remoting
+                // deserializer (InvocationInfo.FromPSObjectForRemoting) reconstructs
+                // MyCommand as a RemoteCommandInfo, copying CommandType verbatim from
+                // the serialized object. A RemoteCommandInfo can report
+                // CommandTypes.Application / CommandTypes.ExternalScript while not
+                // being an ApplicationInfo / ExternalScriptInfo, so the previous
+                // direct casts threw InvalidCastException. Because GetLogContext runs
+                // on the pipeline worker thread while a terminating error is being
+                // logged (MshCommandRuntime.ManageException ->
+                // LogCommandHealthEvent), that exception was unhandled and could
+                // crash the host. Pattern-matching falls back to skipping
+                // CommandPath for any command that lacks a concrete path-bearing type.
+                switch (invocationInfo.MyCommand)
                 {
-                    case CommandTypes.Application:
-                        logContext.CommandPath = ((ApplicationInfo)invocationInfo.MyCommand).Path;
+                    case ApplicationInfo applicationInfo:
+                        logContext.CommandPath = applicationInfo.Path;
                         break;
-                    case CommandTypes.ExternalScript:
-                        logContext.CommandPath = ((ExternalScriptInfo)invocationInfo.MyCommand).Path;
+                    case ExternalScriptInfo externalScriptInfo:
+                        logContext.CommandPath = externalScriptInfo.Path;
                         break;
                 }
             }
